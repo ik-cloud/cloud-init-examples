@@ -1,0 +1,107 @@
+#cloud-config
+# Validate: sudo ros config validate -i cloud-config.yml
+# Usage: sudo ros install -c https://bit.ly/ros-cloud-config -d /dev/sda -s --append "rancher.autologin=tty1 rancher.autologin=ttyS0"
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCsnVbSuI95xB2jvcTysn0tAeQfm0zVNWYuqB0xVWiAQIyMWjSbDiXGHxHlP980Dqz1Yq3rOjXQBK2Dfi9FnpLXybQZr/VwOxPOLfisbez49UgI1uPfg/bzQB8ezqn0qDgnnLxEOldeoE0w0gUwQs1tMw5kt9wvsACc2VdYiT1B3iKmckPUfNT0SikkZ5yW/YBrvLP2M1m3Ip4i8MGRi8CfpuRuH6Yt6da9MPe7FK4IsSpVUbQPwKF0TUB0mA5SFtZvjnqgQUxLAANGQcwPDXqiOiXZYb2yRPDeuSerN35BcX2NtS0yW+bgqOfTDA9BXWBdSZ1JLzhSHmgPNmgeHOqzcEhXGPa7qtPACKgg8C9zaevFCENBlCo8ybIi00SICLiEGKPhgfr8UPT6+z5B6k+HinMKvCMfn5LcaTOeGXxS/BNDnQveToOZ0wcD3hA8/OZlP7hth55BNJoscornj0Vma9qQUeY6UxffypbY4uo4eZA+i8su9Sv01XMFQO0SdBg00l+dPM6wugtVOUwDuKrBwKb0kubZsWKz5jxKcsgABoxUUPiN/7a3KbToYeRi8zxZKkD5HFpvMT1AGqOHv0aIMc+iyFPXYk1MIrvPnTuViJ/haLHdMdDbw9fuKLfNQcGi07Xb4AfE7caAGJyGgjMcTaQ3lu8eJbVJNpjK/nIfyw== Heri-no-iPhone
+rancher:
+  console: ubuntu # https://rancher.com/docs/os/v1.x/en/installation/configuration/switching-consoles/
+  ssh: # https://rancher.com/docs/os/v1.x/en/installation/configuration/ssh-keys/
+    port: 22
+    # listen_address: 172.22.100.100
+  network:
+    dhcp_timeout: 10
+    interfaces: # https://rancher.com/docs/os/v1.x/en/installation/networking/interfaces/
+      eth0:
+        dhcp: true
+      wlan0:
+        wifi_network: network1
+    wifi_networks:
+      network1:
+        ssid: "B l o c k c h a i n Z o o"
+        #psk: "Your wifi password"
+        scan_ssid: 1
+  services:
+    console:
+      volumes:
+      - /etc/containers:/etc/containers
+    container-data-volumes:
+      volumes:
+      - /var/lib/user-docker:/var/lib/docker
+      - /var/lib/m-user-docker:/var/lib/m-user-docker
+      - /var/lib/user-containers:/var/lib/containers
+    zerotier-one: # https://hub.docker.com/r/bltavares/zerotier
+      image: bltavares/zerotier
+      labels:
+        io.rancher.os.scope: system
+        #io.rancher.os.after: network
+      volumes:
+        - /var/lib/zerotier-one:/var/lib/zerotier-one
+      restart: always
+      net: host
+      devices:
+        - /dev/net/tun:/dev/net/tun
+      cap_add:
+        - NET_ADMIN
+        - SYS_ADMIN
+      volumes_from:
+        - system-volumes
+    zerotier-join:
+      image: bltavares/zerotier
+      labels:
+        io.rancher.os.scope: system
+      volumes:
+        - /var/lib/zerotier-one:/var/lib/zerotier-one
+      restart: on-failure
+      net: host
+      entrypoint: "zerotier-cli"
+      command: ["join", "83048a0632c80254"]
+      depends_on:
+        - zerotier-one
+    #wireguard: # https://vitobotta.com/2019/07/17/kubernetes-wireguard-vpn-rancheros/
+  services_include: # https://github.com/rancher/os/issues/2917
+    #kernel-extras: true
+  modules: [ath10k_pci] # https://rancher.com/docs/os/v1.x/en/installation/configuration/loading-kernel-modules/
+runcmd:
+  - chmod o+rwx /run/user
+write_files:
+  - path: /lib/firmware/ath10k/QCA9377/hw1.0/firmware-6.bin
+    content: ""
+  - path: /etc/rc.local
+    permissions: "0755"
+    owner: root
+    content: |
+      #!/bin/bash
+      wait-for-dns () {
+        while ! nslookup index.docker.io >/dev/null 2>/dev/null; do
+          echo "wait for nameserver init (docker.io)"
+          sleep 1s
+        done
+      }
+      wait-for-network () {
+        while ! curl -o /dev/null -sf https://index.docker.io/; do
+          echo "wait for network init (docker.io)"
+          sleep 1s
+        done
+      }
+      # https://github.com/rancher/os/issues/2917
+      if [ "$(ros service list | awk '/kernel-extras/{print $1}')" != "enabled" ]; then
+        wait-for-network
+        #wait-for-docker
+        ros service enable kernel-extras
+        ros service up kernel-extras
+        cp /dev/null /lib/firmware/ath10k/QCA9377/hw1.0/firmware-6.bin
+        modprobe -a ath10k_pci
+      fi
+      # https://github.com/rancher/os/issues/2882#issuecomment-532579763
+      if [ -z "$(ros service ps | awk '/^zerotier-one/{print $1}')" ]; then
+        wait-for-network
+        #wait-for-docker
+        ros service up zerotier-one zerotier-join
+      fi
+      if [ ! -f /usr/local/bin/docker-compose ]; then
+        curl -L https://github.com/docker/compose/releases/download/1.24.0/docker-compose-Linux-x86_64 -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+      fi
+      wait-for-docker
+      #sudo -u rancher /home/rancher/open-balena/scripts/compose up -d
+# Custom RancherOS ISO: https://rancher.com/docs/os/v1.x/en/installation/custom-builds/custom-rancheros-iso/
