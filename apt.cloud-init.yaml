@@ -1,0 +1,67 @@
+#cloud-config
+# vim: ft=yaml
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - git
+  - gnupg2
+  - htop
+  - rsync
+  - software-properties-common
+  - tig
+  - tmux
+  - vim-nox
+  - multitail
+  - htop
+
+runcmd:
+  - [ sh, -c, 'echo "APT::Install-Recommends \"0\";" >> /etc/apt/apt.conf.d/01norecommend' ]
+  - [ sh, -c, 'echo "APT::Install-Suggests "0";" >> /etc/apt/apt.conf.d/01norecommend' ]
+  - [ sh, -c, 'curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -' ]
+  - [ sh, -c, 'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"' ]
+  - [ sh, -c, 'apt update' ]
+  - [ sh, -c, 'apt install -y docker-ce docker-ce-cli containerd.io' ]
+  - [ sh, -c, 'curl -L https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep "tag_name" | cut -d \" -f4)/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose' ]
+  - [ sh, -c, 'chmod 755 /usr/local/bin/docker-compose' ]
+  - [ sh, -c, 'curl -sSf https://moncho.github.io/dry/dryup.sh | sudo sh' ]
+  - [ sh, -c, 'chmod 755 /usr/local/bin/dry' ]
+  - [ systemctl, start, docker ]
+  - [ sh, -c, 'apt autoremove --purge' ]
+  - [ sh, -c, 'apt clean' ]
+
+system_info:
+  default_user:
+    name: tun
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [docker, sudo]
+
+disable_root: true
+
+ssh_authorized_keys:
+  - ssh-rsa llave/pública/aquí/
+
+locale: en_US.UTF-8
+locale_configfile: /etc/default/locale
+preserve_hostname: yes
+fqdn: yalitza.tunlabs.mx
+hostname: yalitza
+timezone: America/Cancun
+manual_cache_clean: False
+apt_pipelining: False
+apt:
+  preserve_sources_list: true
+  conf: | 
+    APT {
+      Get {
+        Assume-Yes "true";
+        Fix-Broken "true";
+      };
+    };
+power_state:
+ mode: reboot
+ message: Be right back!
+final_message: "The system is finally up, after $UPTIME seconds"
