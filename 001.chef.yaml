@@ -1,0 +1,22 @@
+#cloud-config
+chef:
+  install_type: "omnibus"
+  force_install: true
+  omnibus_url: "https://www.getchef.com/chef/install.sh"
+  server_url: "https://api.chef.io/organizations/iacbook"
+  validation_name: "iacbook"
+  validation_cert: |
+    -----BEGIN RSA PRIVATE KEY-----
+    #cloud-config
+chef:
+  install_type: "omnibus"
+  force_install: true
+  omnibus_url: "https://www.getchef.com/chef/install.sh"
+  server_url: "https://api.chef.io/organizations/iacbook"
+  validation_name: "iacbook"
+  validation_cert: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEowIBAAKCAQEAuR/x0A96mYy6yaZJiWb+xqtl8ZkCA8EOdgHta+7KZU4K8Ws9
+    -----END RSA PRIVATE KEY-----
+  run_list:
+  - "recipe[starter]"
